@@ -1,6 +1,6 @@
 #define INITIAL_WIDTH 720
 #define INITIAL_HEIGHT 720
-#define EPSILON 0.0001
+#define EPSILON 0.00001
 #define THREAD_COUNT 24
 #include<stdint.h>
 #include<stdio.h>
@@ -79,11 +79,68 @@ float cube(float_v3_t position, float radius) {
 	}
 }
 
+/*float mengerSponge(float_v3_t position) {
+float distance = cube(position, 1.5 - EPSILON);
+distance = fmax(distance, -cube(position, 0.5 + EPSILON));
+distance = fmax(distance, -cube((float_v3_t) {position.x + 1.0, position.y, position.z}, 0.5 + EPSILON));
+distance = fmax(distance, -cube((float_v3_t) {position.x - 1.0, position.y, position.z}, 0.5 + EPSILON));
+distance = fmax(distance, -cube((float_v3_t) {position.x, position.y + 1.0, position.z}, 0.5 + EPSILON));
+distance = fmax(distance, -cube((float_v3_t) {position.x, position.y - 1.0, position.z}, 0.5 + EPSILON));
+distance = fmax(distance, -cube((float_v3_t) {position.x, position.y, position.z + 1.0}, 0.5 + EPSILON));
+distance = fmax(distance, -cube((float_v3_t) {position.x, position.y, position.z - 1.0}, 0.5 + EPSILON));
+return distance;
+}*/
+
+float cubeSDF(float_v3_t rayPosition, float_v3_t cubePosition, float length) {
+	rayPosition.x -= cubePosition.x;
+	rayPosition.y -= cubePosition.y;
+	rayPosition.z -= cubePosition.z;
+	float radius = length / 2 + EPSILON;
+	rayPosition.x = fabs(rayPosition.x - radius) - radius;
+	rayPosition.y = fabs(rayPosition.y - radius) - radius;
+	rayPosition.z = fabs(rayPosition.z - radius) - radius;
+	if(rayPosition.x > 0 || rayPosition.y > 0 || rayPosition.z > 0) {
+		float squaredDistance = 0;
+		squaredDistance += rayPosition.x * rayPosition.x * (rayPosition.x > 0);
+		squaredDistance += rayPosition.y * rayPosition.y * (rayPosition.y > 0);
+		squaredDistance += rayPosition.z * rayPosition.z * (rayPosition.z > 0);
+		return sqrt(squaredDistance);
+	} else {
+		return fmax(rayPosition.x, fmax(rayPosition.y, rayPosition.z));
+	}
+}
+
+float cutCube(float distance, float_v3_t rayPosition, float_v3_t cubePosition, float length) {
+	float subLength = length / 3;
+	float_v3_t center = {
+		cubePosition.x + subLength,
+		cubePosition.y + subLength,
+		cubePosition.z + subLength
+	};
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z}, subLength));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x - subLength, center.y, center.z}, subLength));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x + subLength, center.y, center.z}, subLength));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y - subLength, center.z}, subLength));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y + subLength, center.z}, subLength));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z - subLength}, subLength));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z + subLength}, subLength));
+	return distance;
+}
+
+float mengerSponge(float_v3_t rayPosition, float_v3_t spongePosition, float length) {
+	rayPosition.x -= spongePosition.x;
+	rayPosition.y -= spongePosition.y;
+	rayPosition.z -= spongePosition.z;
+	float distance = cubeSDF(rayPosition, (float_v3_t) {2 * EPSILON, 2 * EPSILON, 2 * EPSILON}, 1.5 - 4 * EPSILON);
+	distance = cutCube(distance, rayPosition, (float_v3_t) {0, 0, 0}, 1.5);
+	return distance;
+}
+
 float ufmod(float x, float y) {
 	return fmod(x, y) + (x < 0) * y;
 }
 
-float getDistance(float_v3_t position) {
+/*float getDistance(float_v3_t position) {
 	position.x = fabs(ufmod(position.x, 10.0));
 	position.y = fabs(ufmod(position.y, 10.0));
 	position.z = fabs(ufmod(position.z, 10.0));
@@ -93,6 +150,9 @@ float getDistance(float_v3_t position) {
 		-cube((float_v3_t) {position.x - 5.0, position.y - 5.0, position.z - 4.5}, 0.4)
 	);
 	//return sphere((float_v3_t) {position.x, position.y, position.z - 5});
+}*/
+float getDistance(float_v3_t position) {
+	return mengerSponge(position, (float_v3_t) {0, 0, 0}, 1.5);
 }
 
 float_v3_t getNormal(float_v3_t position) {
