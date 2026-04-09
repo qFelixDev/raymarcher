@@ -117,13 +117,13 @@ float cutCube(float distance, float_v3_t rayPosition, float_v3_t cubePosition, f
 		cubePosition.y + subLength,
 		cubePosition.z + subLength
 	};
-	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z}, subLength));
-	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x - subLength, center.y, center.z}, subLength));
-	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x + subLength, center.y, center.z}, subLength));
-	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y - subLength, center.z}, subLength));
-	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y + subLength, center.z}, subLength));
-	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z - subLength}, subLength));
-	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z + subLength}, subLength));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z}, subLength + 2 * EPSILON));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x - subLength, center.y, center.z}, subLength + 2 * EPSILON));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x + subLength, center.y, center.z}, subLength + 2 * EPSILON));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y - subLength, center.z}, subLength + 2 * EPSILON));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y + subLength, center.z}, subLength + 2 * EPSILON));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z - subLength}, subLength + 2 * EPSILON));
+	distance = fmax(distance, -cubeSDF(rayPosition, (float_v3_t) {center.x, center.y, center.z + subLength}, subLength + 2 * EPSILON));
 	return distance;
 }
 
@@ -133,6 +133,56 @@ float mengerSponge(float_v3_t rayPosition, float_v3_t spongePosition, float leng
 	rayPosition.z -= spongePosition.z;
 	float distance = cubeSDF(rayPosition, (float_v3_t) {2 * EPSILON, 2 * EPSILON, 2 * EPSILON}, 1.5 - 4 * EPSILON);
 	distance = cutCube(distance, rayPosition, (float_v3_t) {0, 0, 0}, 1.5);
+	return distance;
+}
+
+#define MAX_ITERATIONS 5
+
+float_v3_t determineClosestSubarea(float_v3_t subarea, float_v3_t position, float length) {
+	float radius = length / 2;
+	position.x -= subarea.x - radius;
+	position.y -= subarea.y - radius;
+	position.z -= subarea.z - radius;
+	float_v3_t absolute = {
+		fabs(position.x),
+		fabs(position.y),
+		fabs(position.z)
+	};
+	if(absolute.x > absolute.y) {
+		if(absolute.x < absolute.z) {
+			subarea.x += length * (1 - 2 * (position.x < 0));
+			return subarea;
+		}
+	} else {
+		if(absolute.y > absolute.z) {
+			subarea.y += length * (1 - 2 * (position.y < 0));
+			return subarea;
+		}
+	}
+	subarea.z += length * (1 - 2 * (position.z < 0));
+	return subarea;
+}
+
+float mengerSpongeSDF(float_v3_t rayPosition, float_v3_t spongePosition, float length) {
+	rayPosition.x -= spongePosition.x;
+	rayPosition.y -= spongePosition.y;
+	rayPosition.z -= spongePosition.z;
+	float distance = cubeSDF(rayPosition, (float_v3_t) {2 * EPSILON, 2 * EPSILON, 2 * EPSILON}, length - 4 * EPSILON);
+	distance = cutCube(distance, rayPosition, (float_v3_t) {0, 0, 0}, length);
+	int iteration = 0;
+	while(iteration < MAX_ITERATIONS && distance < length) {
+		length /= 3 + EPSILON;
+		float_v3_t subarea = {
+			floor(rayPosition.x / length) * length,
+			floor(rayPosition.y / length) * length,
+			floor(rayPosition.z / length) * length
+		};
+		if(distance > EPSILON) {
+			subarea = determineClosestSubarea(subarea, rayPosition, length);
+		}
+		distance = cutCube(distance, rayPosition, subarea, length);
+		iteration++;
+	}
 	return distance;
 }
 
@@ -152,7 +202,7 @@ float ufmod(float x, float y) {
 	//return sphere((float_v3_t) {position.x, position.y, position.z - 5});
 }*/
 float getDistance(float_v3_t position) {
-	return mengerSponge(position, (float_v3_t) {0, 0, 0}, 1.5);
+	return mengerSpongeSDF(position, (float_v3_t) {0.1, 0.1, 0.1}, 1.5);
 }
 
 float_v3_t getNormal(float_v3_t position) {
