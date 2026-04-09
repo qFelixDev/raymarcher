@@ -136,7 +136,7 @@ float mengerSponge(float_v3_t rayPosition, float_v3_t spongePosition, float leng
 	return distance;
 }
 
-#define MAX_ITERATIONS 5
+#define MAX_ITERATIONS 6
 
 float_v3_t determineClosestSubarea(float_v3_t subarea, float_v3_t position, float length) {
 	float radius = length / 2;
@@ -149,7 +149,7 @@ float_v3_t determineClosestSubarea(float_v3_t subarea, float_v3_t position, floa
 		fabs(position.z)
 	};
 	if(absolute.x > absolute.y) {
-		if(absolute.x < absolute.z) {
+		if(absolute.x > absolute.z) {
 			subarea.x += length * (1 - 2 * (position.x < 0));
 			return subarea;
 		}
@@ -170,8 +170,10 @@ float mengerSpongeSDF(float_v3_t rayPosition, float_v3_t spongePosition, float l
 	float distance = cubeSDF(rayPosition, (float_v3_t) {2 * EPSILON, 2 * EPSILON, 2 * EPSILON}, length - 4 * EPSILON);
 	distance = cutCube(distance, rayPosition, (float_v3_t) {0, 0, 0}, length);
 	int iteration = 0;
-	while(iteration < MAX_ITERATIONS && distance < length) {
+	while(iteration < MAX_ITERATIONS) {
 		length /= 3 + EPSILON;
+		if(distance > length)
+			break;
 		float_v3_t subarea = {
 			floor(rayPosition.x / length) * length,
 			floor(rayPosition.y / length) * length,
@@ -181,6 +183,32 @@ float mengerSpongeSDF(float_v3_t rayPosition, float_v3_t spongePosition, float l
 			subarea = determineClosestSubarea(subarea, rayPosition, length);
 		}
 		distance = cutCube(distance, rayPosition, subarea, length);
+		iteration++;
+	}
+	return distance;
+}
+
+float fastMengerSpongeSDF(float_v3_t position) {
+	float distance = cubeSDF(position, (float_v3_t) {0, 0, 0}, 1.0);
+	float scale = 1;
+	int iteration = 0;
+	while(iteration < MAX_ITERATIONS) {
+		float_v3_t a = {
+			fmod(position.x * scale, 2) - 1,
+			fmod(position.y * scale, 2) - 1,
+			fmod(position.z * scale, 2) - 1
+		};
+		scale *= 3;
+		float_v3_t r = {
+			fabs(1 - 3 * fabs(a.x)),
+			fabs(1 - 3 * fabs(a.y)),
+			fabs(1 - 3 * fabs(a.z))
+		};
+		float da = fmax(r.x, r.y);
+		float db = fmax(r.y, r.z);
+		float dc = fmax(r.z, r.x);
+		float c = (fmin(da, fmin(db, dc)) - 1) / scale;
+		distance = fmax(distance, c);
 		iteration++;
 	}
 	return distance;
@@ -202,7 +230,8 @@ float ufmod(float x, float y) {
 	//return sphere((float_v3_t) {position.x, position.y, position.z - 5});
 }*/
 float getDistance(float_v3_t position) {
-	return mengerSpongeSDF(position, (float_v3_t) {0.1, 0.1, 0.1}, 1.5);
+	//return mengerSpongeSDF(position, (float_v3_t) {0.1, 0.1, 0.1}, 1.5);
+	return fastMengerSpongeSDF((float_v3_t) {position.x + 0.1, position.y, position.z});
 }
 
 float_v3_t getNormal(float_v3_t position) {
